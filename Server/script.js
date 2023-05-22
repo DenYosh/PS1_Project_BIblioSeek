@@ -51,7 +51,6 @@ app.get("/getInfo", async (req, res) => {
 
   const xmlData = response.data;
   getBookInformation(xmlData, id, (newBook) => {
-    console.log(newBook);
 
     res.json({
       bookTitle: newBook.title,
@@ -85,7 +84,6 @@ app.get("/image", async (req, res) => {
 
     const xmlData = response.data;
     getBookInformation(xmlData, id, async (newBook) => {
-      console.log(newBook);
 
       // Fetch the image from the remote URL
       if (newBook.image) {
@@ -178,13 +176,14 @@ function getBookInformation(xmlData, id, callback) {
 async function extractIds() {
   console.log("Extracting IDs...");
   try {
-    // // const allBooksEndpoints = ["https://cataloguswebservices.bibliotheek.be/geel/search/?q=harry+potter&authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover"]
-    const allBooksEndpoints = [];
-    for (i = 97; i <= 122; i++) {
-      allBooksEndpoints.push(`https://cataloguswebservices.bibliotheek.be/geel/search/?q=
-      ${String.fromCharCode(i)}
-      &authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover`);
-    }
+    const allBooksEndpoints = ["https://cataloguswebservices.bibliotheek.be/geel/search/?q=harry+potter&authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover"]
+    // Enable the forloop for getting 520 books : currently not optimized for the API (cataloguswebservices.bibliotheek.be)
+    // const allBooksEndpoints = [];
+    // for (i = 97; i <= 122; i++) {
+    //   allBooksEndpoints.push(`https://cataloguswebservices.bibliotheek.be/geel/search/?q=
+    //   ${String.fromCharCode(i)}
+    //   &authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover`);
+    // }
     await Promise.all(
       allBooksEndpoints.map(async (url) => {
         const response = await axios.get(url).catch((err) => {
