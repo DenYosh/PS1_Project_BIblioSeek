@@ -5,7 +5,7 @@ using UnityEngine.Networking;
 
 public class NetworkHandeler : MonoBehaviour
 {
-    private readonly string _APIUrl = "http://10.146.39.39:3000/";
+    private readonly string _APIUrl = "http://yoshi.blackcreek.nl:3000/";
 
     TaskCompletionSource<CoverInformationImage> tcsCover;
     public async void GetBookCoverImage(System.Action<CoverInformationImage> callback)
@@ -83,8 +83,8 @@ public class NetworkHandeler : MonoBehaviour
     }
     private IEnumerator GetCoverInformation(string url, System.Action<CoverInformation> callback)
     {
-        Debug.Log($"GetCoverInformation");
-        System.Diagnostics.Debug.WriteLine($"GetCoverInformation");
+        Debug.Log($"GetCoverInformation: {url}");
+        System.Diagnostics.Debug.WriteLine($"GetCoverInformation: {url}");
         UnityWebRequest webRequest = UnityWebRequest.Get(url);
         yield return webRequest.SendWebRequest();
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
@@ -10,6 +11,7 @@ public class GameManager : MonoBehaviour
     private BottomPanelHandelerUI bottomPanel;
     private EndPanel endPanel;
     private NetworkHandeler networkHandeler;
+    private List<String> previousBooks = new();
 
     private int booksFound = 0;
     private DateTime startTime;
@@ -58,10 +60,16 @@ public class GameManager : MonoBehaviour
         System.Diagnostics.Debug.WriteLine($"Set level: {level}");
         networkHandeler.GetBookCoverImage((coverInformationImage) =>
         {
+            System.Diagnostics.Debug.WriteLine($"Netwerk completed GetBookCoverImage: {coverInformationImage}");
+            System.Diagnostics.Debug.WriteLine($"Added book to previousBooks: {coverInformationImage.IsbnNumber}");
+            this.previousBooks.Add(coverInformationImage.IsbnNumber);
+            System.Diagnostics.Debug.WriteLine($"Updated previous Books: {this.previousBooks}");
             runtimeManager.GetImage(coverInformationImage);
-
+            System.Diagnostics.Debug.WriteLine($"Netwerk completed GetImage: {coverInformationImage}");
+            
             networkHandeler.GetUIInformation(coverInformationImage, (bookInformationImage) =>
             {
+                System.Diagnostics.Debug.WriteLine($"Netwerk completed GetUIInformation: {bookInformationImage}");
                 Debug.Log("Change UI");
                 bottomPanel.ChangeBookUI(bookInformationImage);
             }
@@ -78,18 +86,37 @@ public class GameManager : MonoBehaviour
             TimeSpan elapsedTime = DateTime.Now - startTime;
             endPanel.EditTime(elapsedTime);
             userInterFaceHandeler.EndGame();
+            previousBooks.Clear();
             return;
         }
         networkHandeler.GetBookCoverImage((coverInformationImage) =>
         {
-            runtimeManager.GetImage(coverInformationImage);
 
-            networkHandeler.GetUIInformation(coverInformationImage, (bookInformationImage) =>
+            System.Diagnostics.Debug.WriteLine($"Netwerk completed GetBookCoverImage: {coverInformationImage}");
+
+            if (!this.previousBooks.Contains(coverInformationImage.IsbnNumber))
             {
-                booksFound++;
-                bottomPanel.ChangeBookUI(bookInformationImage);
+                System.Diagnostics.Debug.WriteLine($"Added book to previousBooks no double book: {coverInformationImage.IsbnNumber}");
+                this.previousBooks.Add(coverInformationImage.IsbnNumber);
+                System.Diagnostics.Debug.WriteLine($"Updated previous Books: {this.previousBooks}");
+
+                runtimeManager.GetImage(coverInformationImage);
+                System.Diagnostics.Debug.WriteLine($"Netwerk completed GetImage: {coverInformationImage}");
+
+                networkHandeler.GetUIInformation(coverInformationImage, (bookInformationImage) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"Netwerk completed GetUIInformation: {bookInformationImage}");
+                    booksFound++;
+                    bottomPanel.ChangeBookUI(bookInformationImage);
+                }
+                );
+            } else
+            {
+                Debug.Log($"Double book");
+                System.Diagnostics.Debug.WriteLine($"Double book");
+                this.BookFound();
             }
-            );
+            
         });
     }
 
