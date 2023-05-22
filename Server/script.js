@@ -43,7 +43,12 @@ app.get("/getInfo", async (req, res) => {
     id +
     "&authorization=629e87cf5fe7767339231c6e0e1307ec"; // availabilty api using id
 
-  const response = await axios.get(apiAvailability);
+  const response = await axios.get(apiAvailability).catch((err) => {
+    if (err.response) {
+      console.log(err.response.status);
+    }
+  });
+
   const xmlData = response.data;
   getBookInformation(xmlData, id, (newBook) => {
     console.log(newBook);
@@ -72,7 +77,12 @@ app.get("/image", async (req, res) => {
       id +
       "&authorization=629e87cf5fe7767339231c6e0e1307ec"; // availabilty api using id
 
-    const response = await axios.get(apiAvailability);
+    const response = await axios.get(apiAvailability).catch((err) => {
+      if (err.response) {
+        console.log(err.response.status);
+      }
+    });
+
     const xmlData = response.data;
     getBookInformation(xmlData, id, async (newBook) => {
       console.log(newBook);
@@ -167,64 +177,68 @@ function getBookInformation(xmlData, id, callback) {
 
 async function extractIds() {
   console.log("Extracting IDs...");
-  //get ids from books and add them to idArray
   try {
-    // get data from api
-
+    // // const allBooksEndpoints = ["https://cataloguswebservices.bibliotheek.be/geel/search/?q=harry+potter&authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover"]
+    const allBooksEndpoints = [];
     for (i = 97; i <= 122; i++) {
-      const response = await axios.get(
-        `https://cataloguswebservices.bibliotheek.be/staging/geel/search/?q=
-        ${String.fromCharCode(i)}
-        &authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover`
-      );
-
-      const xmlData = response.data;
-      xmlParser.parseString(xmlData, (err, data) => {
-        //parse date form xml to json
-        if (err) throw err;
-        const jsonData = JSON.stringify(data.aquabrowser.results.result); // get required property
-        const jsonObj = JSON.parse(jsonData);
-
-        allRandomBooks.bookIds.push(jsonObj.map((obj) => obj.id._));
-        allRandomBooks.bookCovers.push(
-          jsonObj.map((obj) => obj.coverimages.coverimage._)
-        );
-      });
+      allBooksEndpoints.push(`https://cataloguswebservices.bibliotheek.be/geel/search/?q=
+      ${String.fromCharCode(i)}
+      &authorization=629e87cf5fe7767339231c6e0e1307ec&refine=true&s=cover`);
     }
+    await Promise.all(
+      allBooksEndpoints.map(async (url) => {
+        const response = await axios.get(url).catch((err) => {
+          if (err.response) {
+            console.log(err.response.status);
+          }
+        });
+        const xmlData = response.data;
+        xmlParser.parseString(xmlData, (err, data) => {
+          //parse date form xml to json
+          if (err) throw err;
+          const jsonData = JSON.stringify(data.aquabrowser.results.result); // get required property
+          const jsonObj = JSON.parse(jsonData);
 
-    allRandomBooks.bookIds = allRandomBooks.bookIds.flat(1);
-    allRandomBooks.bookCovers = allRandomBooks.bookCovers.flat(1);
-    console.log("Done Extracting IDs...");
-    await extractIsbn();
-  } catch (error) {
-    console.error(error);
-  }
-}
+          allRandomBooks.bookIds = allRandomBooks.bookIds.concat(
+            jsonObj.map((obj) => obj.id._)
+          );
+          allRandomBooks.bookCovers = allRandomBooks.bookCovers.concat(
+            jsonObj.map((obj) => obj.coverimages.coverimage._)
+          );
+          allRandomBooks.IsbnNummers = allRandomBooks.IsbnNummers.concat(
+            jsonObj.map((obj) => {
+              let isbn = null;
+              if (Array.isArray(obj.identifiers["isbn-id"])) {
+                for (const isbnObj of obj.identifiers["isbn-id"]) {
+                  if (isbnObj._) {
+                    isbn = isbnObj._;
+                    break;
+                  }
+                }
+              } else if (
+                obj.identifiers["isbn-id"] &&
+                obj.identifiers["isbn-id"]._
+              ) {
+                isbn = obj.identifiers["isbn-id"]._;
+              }
 
-async function extractIsbn() {
-  console.log("Extracting ISBNs...");
+              const ean =
+                obj.identifiers["ean-id"] && obj.identifiers["ean-id"]._;
 
-  // get isbn from book using cover link, also possible using another endpoint if preffered
-  try {
-    Array.from(allRandomBooks.bookCovers).forEach((element) => {
-      //extract ISBN from bookcover link
-      const text = element;
-      const searchString = "ISBN=";
+              if (isbn) {
+                return isbn;
+              } else if (ean) {
+                return ean;
+              }
+              return obj.identifiers["ean-id"][0]._;
+            })
+          );
+        });
+      })).then(async () => {
+        console.log("Done Extracting IDs...");
+        await removeUnavailable();
+      });
 
-      const index = text.indexOf(searchString);
-      if (index >= 0) {
-        const selectedText = text
-          .substring(index + searchString.length)
-          .substring(0, 13); // select only ISBN from bookcover link
-        let temp = allRandomBooks.IsbnNummers;
-        temp.push(selectedText);
-        allRandomBooks.IsbnNummers = temp;
-      } else {
-        console.log(`"${searchString}" not found in "${text}"`);
-      }
-    });
-    console.log("Done Extracting ISBNs...");
-    await removeUnavailable();
   } catch (error) {
     console.error(error);
   }
@@ -235,54 +249,63 @@ async function removeUnavailable() {
 
   // Remove unavailable books from all arrays
   try {
-    allRandomBooks.bookIds.forEach(async (bookIdElem) => {
-      const apiAvailability =
-        "https://cataloguswebservices.bibliotheek.be/staging/geel/availability/?id=" +
-        bookIdElem +
-        "&authorization=629e87cf5fe7767339231c6e0e1307ec"; // availabilty api using id
-      const response = await axios.get(apiAvailability);
-      const xmlData = response.data;
-      xmlParser.parseString(xmlData, (err, data) => {
-        //parse date form xml to json
-        if (err) throw err;
-        const jsonData = JSON.stringify(
-          data.aquabrowser.locations.location.location.items.item
-        ); // get required property
-        const jsonObj = JSON.parse(jsonData);
+    await Promise.all(
+      allRandomBooks.bookIds.map(async (bookIdElem) => {
+        const apiAvailability =
+          "https://cataloguswebservices.bibliotheek.be/geel/availability/?id=" +
+          bookIdElem +
+          "&authorization=629e87cf5fe7767339231c6e0e1307ec"; // availabilty api using id
+        const response = await axios.get(apiAvailability).catch((err) => {
+          if (err.response) {
+            console.log(err.response.status);
+          }
+        });
 
-        if (Array.isArray(jsonObj)) {
-          //if result is array (multiple of the same book found)
-          let aanwezig = false;
-          jsonObj.forEach((element) => {
-            if (
-              element.status.includes("Aanwezig") |
-              element.status.includes("aanwezig")
-            ) {
-              aanwezig = true;
+        const xmlData = response.data;
+        xmlParser.parseString(xmlData, (err, data) => {
+          //parse date form xml to json
+          if (err) throw err;
+          const jsonData = JSON.stringify(
+            data.aquabrowser.locations.location.location.items.item
+          ); // get required property
+          const jsonObj = JSON.parse(jsonData);
+
+          if (Array.isArray(jsonObj)) {
+            //if result is array (multiple of the same book found)
+            let aanwezig = false;
+            jsonObj.forEach((element) => {
+              if (
+                element.status.includes("Aanwezig") |
+                element.status.includes("aanwezig")
+              ) {
+                aanwezig = true;
+              }
+            });
+            if (aanwezig) {
+              return;
             }
-          });
-          if (aanwezig) {
+          } else if (jsonObj.status === "Aanwezig") {
             return;
           }
-        } else if (jsonObj.status === "Aanwezig") {
-          return;
-        }
-        const index = allRandomBooks.bookIds.indexOf(bookIdElem);
-        const bookIds = allRandomBooks.bookIds;
-        bookIds.splice(index, 1);
-        allRandomBooks.bookIds = bookIds;
-        const IsbnNummer = allRandomBooks.IsbnNummers;
-        IsbnNummer.splice(index, 1);
-        allRandomBooks.IsbnNummers = IsbnNummer;
-        const bookCovers = allRandomBooks.bookCovers;
-        bookCovers.splice(index, 1);
-        allRandomBooks.bookCovers = bookCovers;
+          console.log("Afwezig:", bookIdElem);
+          const index = allRandomBooks.bookIds.indexOf(bookIdElem);
+          const bookIds = allRandomBooks.bookIds;
+          bookIds.splice(index, 1);
+          allRandomBooks.bookIds = bookIds;
+          const IsbnNummer = allRandomBooks.IsbnNummers;
+          IsbnNummer.splice(index, 1);
+          allRandomBooks.IsbnNummers = IsbnNummer;
+          const bookCovers = allRandomBooks.bookCovers;
+          bookCovers.splice(index, 1);
+          allRandomBooks.bookCovers = bookCovers;
+        });
+      })
+    ).then(() => {
+      console.log("Done Removing Unavailables...");
+      const PORT = process.env.PORT || 3000;
+      app.listen(PORT, () => {
+        console.log(`Server listening on port ${PORT}`);
       });
-    });
-    console.log("Done Removing Unavailables...");
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
     });
   } catch (error) {
     console.error(error);
